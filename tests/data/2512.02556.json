@@ -1,0 +1,68 @@
+{
+  "id": "2512.02556",
+  "authors": [
+    {
+      "_id": "692fa6da26742347f61dab24",
+      "name": "DeepSeek-AI",
+      "hidden": false
+    },
+    {
+      "_id": "692fa6da26742347f61dab25",
+      "name": "Aixin Liu",
+      "hidden": false
+    },
+    {
+      "_id": "692fa6da26742347f61dab2d",
+      "user": {
+        "_id": "644200d95d600fb09520de53",
+        "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/noauth/prs0wIjQx7PE4-IYkXDvw.jpeg",
+        "isPro": false,
+        "fullname": "Chaofan Lin",
+        "user": "siriusneo",
+        "type": "user"
+      },
+      "name": "Chaofan Lin",
+      "status": "admin_assigned",
+      "statusLastChangedAt": "2025-12-03T09:26:56.864Z",
+      "hidden": false
+    },
+    {
+      "_id": "692fa6da26742347f61dac2b",
+      "name": "Zihua Qu",
+      "hidden": false
+    }
+  ],
+  "publishedAt": "2025-12-02T09:25:14.000Z",
+  "submittedOnDailyAt": "2025-12-03T00:26:37.248Z",
+  "title": "DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models",
+  "submittedOnDailyBy": {
+    "_id": "6039478ab3ecf716b1a5fd4d",
+    "avatarUrl": "https://cdn-avatars.huggingface.co/v1/production/uploads/6039478ab3ecf716b1a5fd4d/_Thy4E7taiSYBLKxEKJbT.jpeg",
+    "isPro": true,
+    "fullname": "taesiri",
+    "user": "taesiri",
+    "type": "user"
+  },
+  "summary": "We introduce DeepSeek-V3.2, a model that harmonizes high computational efficiency with superior reasoning and agent performance. The key technical breakthroughs of DeepSeek-V3.2 are as follows: (1) DeepSeek Sparse Attention (DSA): We introduce DSA, an efficient attention mechanism that substantially reduces computational complexity while preserving model performance in long-context scenarios. (2) Scalable Reinforcement Learning Framework: By implementing a robust reinforcement learning protocol and scaling post-training compute, DeepSeek-V3.2 performs comparably to GPT-5. Notably, our high-compute variant, DeepSeek-V3.2-Speciale, surpasses GPT-5 and exhibits reasoning proficiency on par with Gemini-3.0-Pro, achieving gold-medal performance in both the 2025 International Mathematical Olympiad (IMO) and the International Olympiad in Informatics (IOI). (3) Large-Scale Agentic Task Synthesis Pipeline: To integrate reasoning into tool-use scenarios, we developed a novel synthesis pipeline that systematically generates training data at scale. This methodology facilitates scalable agentic post-training, yielding substantial improvements in generalization and instruction-following robustness within complex, interactive environments.",
+  "upvotes": 213,
+  "discussionId": "692fa6da26742347f61dac2c",
+  "ai_summary": "DeepSeek-V3.2 introduces DeepSeek Sparse Attention and a scalable reinforcement learning framework, achieving superior reasoning and performance compared to GPT-5 and Gemini-3.0-Pro in complex reasoning tasks.",
+  "ai_keywords": [
+    "DeepSeek Sparse Attention",
+    "DSA",
+    "reinforcement learning framework",
+    "agentic task synthesis pipeline",
+    "computational efficiency",
+    "long-context scenarios",
+    "gold-medal performance",
+    "International Mathematical Olympiad",
+    "International Olympiad in Informatics",
+    "reasoning proficiency"
+  ],
+  "organization": {
+    "_id": "652faff917096ceb6bf53f3f",
+    "name": "deepseek-ai",
+    "fullname": "DeepSeek",
+    "avatar": "https://cdn-uploads.huggingface.co/production/uploads/6538815d1bdb3c40db94fbfa/xMBly9PUMphrFVMxLX4kq.png"
+  }
+}

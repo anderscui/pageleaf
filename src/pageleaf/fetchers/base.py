@@ -2,6 +2,9 @@
 from abc import ABC, abstractmethod
 
 import re
+from typing import Any
+
+from pydantic import Field, BaseModel
 
 
 def is_valid_arxiv_id(arxiv_id: str) -> bool:
@@ -36,22 +39,45 @@ def is_valid_arxiv_id(arxiv_id: str) -> bool:
 def extract_arxiv_id(url_or_id: str) -> str | None:
     """从URL或直接ID中提取标准的arXiv ID (无版本号)。"""
     # 匹配标准 ID，例如 2401.01234 或 2401.01234v1
-    match = re.search(r'(\d{4}\.\d{5}v?\d?)', url_or_id)
+    if not url_or_id:
+        return None
+    url_or_id = url_or_id.strip('/').strip()
+    match = re.search(r'(\d{4}\.\d{5}(v\d+)?)$', url_or_id)
     if match:
         return match.group(1).split('v')[0] # 移除版本号
     return None
 
 
+def sanitize_filename(filename: str, max_length: int = 200) -> str:
+    """清理文件名，去除特殊字符并限制长度"""
+
+    # 替换非法字符为下划线或空格
+    filename = re.sub(r':', ' - ', filename)
+    filename = re.sub(r'[\\/*?"<>|]', "", filename)
+
+    # 替换换行符或多余空格
+    filename = " ".join(filename.split())
+    # 截断
+    if len(filename) > max_length:
+        filename = filename[:max_length].rsplit(' ', 1)[0]
+    return filename
+
+
+class RawPaperData(BaseModel):
+    source: str
+    external_ids: dict[str, str] = Field(default_factory=dict)
+    payload: Any   # raw JSON/text/PDF path
+
+
 class BaseFetcher(ABC):
     source: str
+    priority: int
 
     @abstractmethod
     def can_handle(self, identifier: str) -> bool:
-        return is_valid_arxiv_id(identifier)
+        pass
 
     @abstractmethod
     def fetch(self, identifier: str):
-        """
-        identifier: arXiv id or url
-        """
-        ...
+        """identifier should be a "raw" id, `fetch` will handle it accordingly."""
+        pass

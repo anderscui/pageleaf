@@ -1,5 +1,5 @@
 # coding=utf-8
-from pageleaf.fetchers.base import is_valid_arxiv_id
+from pageleaf.fetchers.base import is_valid_arxiv_id, extract_arxiv_id
 
 
 def test_is_valid_arxiv_id():
@@ -31,3 +31,24 @@ def test_is_valid_arxiv_id():
     ]
     for arxiv_id, expected in test_cases:
         assert is_valid_arxiv_id(arxiv_id) == expected
+
+
+def test_extract_arxiv_id():
+    cases = [
+        ("2301.12345", "2301.12345"),
+        ("2301.12345v2", "2301.12345"),
+        ("2301.12345v11", "2301.12345"),
+
+        # valid urls
+        ('https://arxiv.org/abs/2501.01234', '2501.01234'),
+        ('https://arxiv.org/pdf/2309.06180', '2309.06180'),
+        ('https://arxiv.org/pdf/2309.06180/', '2309.06180'),
+
+        ("", None),
+        ("abc", None),
+        ("2301.123", None),
+        ("2301.123456", None)
+    ]
+
+    for arxiv_id, expected in cases:
+        assert extract_arxiv_id(arxiv_id) == expected
