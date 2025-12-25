@@ -1,8 +1,37 @@
 # coding=utf-8
+from pathlib import Path
+
 import fitz
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel, PrivateAttr, Field
 
 from pageleaf.commons.iterable import rename_keys
+
+
+def save_image_block(
+        image_block: dict,
+        output_dir: Path,
+        page_index: int,
+        block_index: int,
+        min_width: float = 30.0,
+        min_height: float = 30.0
+) -> Path | None:
+
+    x0, y0, x1, y1 = image_block['bbox']
+    width = x1 - x0
+    height = y1 - y0
+    if width < min_width or height < min_height:
+        return None
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    image_data = image_block['image']
+    image_ext = image_block['ext']
+
+    image_path = output_dir / f'page_{page_index}_img_{block_index}.{image_ext}'
+    with open(image_path, 'wb') as f:
+        f.write(image_data)
+
+    return image_path
 
 
 class PdfFont(BaseModel):
@@ -31,7 +60,7 @@ class PdfSpan(BaseModel):
     flags: int
 
     # not required in most cases
-    chars: list = []
+    chars: list = Field(default_factory=list)
 
     @classmethod
     def load(cls, data: dict, page_number):
@@ -121,6 +150,14 @@ class PdfLine(BaseModel):
             self._text = ''.join([s.text + end for s, end in zip(self.spans, ends)])
         return self._text
 
+    # @property
+    # def height(self):
+    #     return self.bbox[3] - self.bbox[1]
+    #
+    # @property
+    # def y_center(self):
+    #     return (self.bbox[1] + self.bbox[3]) / 2
+
 
 class PdfBlock(BaseModel):
     _text: str = PrivateAttr(default=None)
@@ -131,17 +168,17 @@ class PdfBlock(BaseModel):
     block_number: int
     bbox: tuple[float, float, float, float]
 
-    lines: list[PdfLine] = []
+    lines: list[PdfLine] = Field(default_factory=list)
 
     object_type: str = 'block'
 
     @classmethod
-    def load(cls, data: dict, page_number):
+    def load(cls, data: dict, page_number, image_dir: Path | None = None):
         _type = data['type']
         if _type == 0:
             return TextBlock.load(data, page_number)
         elif _type == 1:
-            return ImageBlock.load(data, page_number)
+            return ImageBlock.load(data, page_number, image_dir=image_dir)
         return None
 
     def is_text(self):
@@ -151,8 +188,12 @@ class PdfBlock(BaseModel):
         return self.type == 1
 
     @property
-    def text(self):
+    def text(self) -> str | None:
         return None
+
+    @property
+    def is_single_line(self):
+        return len(self.lines) == 1
 
 
 class TextBlock(PdfBlock):
@@ -188,24 +229,41 @@ class TextBlock(PdfBlock):
 class ImageBlock(PdfBlock):
     type: int = 1
 
-    ext: str
-    image: bytes
-
     # width and height of original image.
     width: int
     height: int
 
+    ext: str
+    image: bytes | None = None
+    image_path: Path | None = None
     mask: bytes | None = None
 
+
     @classmethod
-    def load(cls, data: dict, page_number: int):
+    def load(cls, data: dict, page_number: int, image_dir: Path | None = None):
         data['block_number'] = data.pop('number', None)
         data['page_number'] = page_number
+
+        if image_dir:
+            saved_path = save_image_block(data, image_dir, page_number, data['block_number'])
+            if not saved_path:
+                return None
+            data['image_path'] = saved_path
+            data.pop('image', None)
+
         return cls.model_validate(data)
 
     @property
     def size(self):
-        return len(self.image)
+        if self.image is not None:
+            return len(self.image)
+        if self.image_path and self.image_path.exists():
+            return self.image_path.stat().st_size
+        return 0
+
+    @property
+    def persisted(self):
+        return self.image_path is not None
 
 
 class PdfPage(BaseModel):
@@ -218,13 +276,13 @@ class PdfPage(BaseModel):
     object_type: str = 'page'
 
     @classmethod
-    def load(cls, data: dict, page_number):
+    def load(cls, data: dict, page_number, image_dir: Path | None = None):
         data['page_number'] = page_number
         blocks = data.get('blocks') or []
         if not blocks:
             return None
 
-        blocks = [PdfBlock.load(block, page_number) for block in blocks]
+        blocks = [PdfBlock.load(block, page_number, image_dir) for block in blocks]
         blocks = [block for block in blocks if block is not None]
         data['blocks'] = blocks
         return cls.model_validate(data)
@@ -236,19 +294,22 @@ class PdfDocument(BaseModel):
     object_type: str = 'document'
 
     @classmethod
-    def load_file(cls, file_path: str):
+    def load_file(cls, file_path: str, image_dir: str | Path | None = None):
+        if image_dir:
+            image_dir = Path(image_dir)
+
         pages = []
         try:
             with fitz.open(file_path) as doc:
                 for page in doc:
                     page_number = page.number + 1
                     page_obj = page.get_text('dict')
-                    page_loaded = PdfPage.load(page_obj, page_number)
+                    page_loaded = PdfPage.load(page_obj, page_number, image_dir)
                     if page_loaded is None:
                         continue
                     pages.append(page_loaded)
         except Exception as e:
-            print(f'load pdf file failed: {e}')
+            print(f'Error loading {file_path}: {e}')
 
         return cls(pages=pages)
 
@@ -256,17 +317,19 @@ class PdfDocument(BaseModel):
 if __name__ == '__main__':
     # file = '/Users/andersc/Downloads/cool nlp papers/Cognitive Architectures for Language Agents v3 (2024).pdf'
     file = '/Users/andersc/data/papers/arxiv/2511.21631 - Qwen3-VL Technical Report.pdf'
-    doc = PdfDocument.load_file(file)
+    doc = PdfDocument.load_file(file, image_dir='./')
     print(f'pages: {len(doc.pages)}')
     for page in doc.pages:
         print(f'page {page.page_number}: ({page.width}, {page.height}), {len(page.blocks)} blocks:')
 
         for block in page.blocks:
+            print(f'block: {block.type}, {block.page_number}, {block.block_number}')
             if block.is_text():
-                if block.lines:
-                    print(block.text)
-                    print()
+                print(block.text[:100])
+                print()
             else:
-                print('image:', block.block_number, block.image[:10])
+                if block.image_path:
+                    print('image:', block.image_path)
+                    print()
 
         print('\n')
