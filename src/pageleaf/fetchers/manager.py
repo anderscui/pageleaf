@@ -1,5 +1,6 @@
 # coding=utf-8
-from pageleaf.fetchers.arxiv import ArxivFetcher
+from pageleaf.fetchers.arxiv_meta import ArxivMetaFetcher
+from pageleaf.fetchers.arxiv_pdf import ArxivPdfFetcher
 from pageleaf.fetchers.base import BaseFetcher, RawPaperData
 from pageleaf.fetchers.huggingface import HuggingFacePaperFetcher
 
@@ -7,8 +8,9 @@ from pageleaf.fetchers.huggingface import HuggingFacePaperFetcher
 class FetcherManager:
     def __init__(self):
         self.fetchers: list[BaseFetcher] = sorted([
+            ArxivMetaFetcher(),
             HuggingFacePaperFetcher(),
-            ArxivFetcher(),
+            ArxivPdfFetcher(),
         ], key=lambda fetcher: fetcher.priority)
 
     def fetch(self, identifier: str) -> dict[str, RawPaperData]:
@@ -24,8 +26,9 @@ class FetcherManager:
 
                 if raw:
                     results[fetcher.source] = raw
-                    if fetcher.source == 'huggingface':
+                    if not suggested_title and fetcher.source in {'arxiv_api', 'huggingface'}:
                         suggested_title = raw.payload.get('title')
+                        print(f'got title from {fetcher.source}')
 
         return results
 

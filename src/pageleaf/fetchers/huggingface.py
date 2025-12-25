@@ -1,8 +1,10 @@
 # coding=utf-8
 import logging
+from pathlib import Path
 
 import httpx
 
+from pageleaf.commons.io.files import json_dump
 from pageleaf.fetchers.base import BaseFetcher, extract_arxiv_id, RawPaperData
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,16 @@ class HuggingFacePaperFetcher(BaseFetcher):
         if not arxiv_id:
             return None
 
+        save_path = Path.home() / f'data/papers/hf/{arxiv_id}.json'
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        if save_path.exists():
+            logger.info(f'HF File already exists: {save_path}, skipping download.')
+            return RawPaperData(
+                source=self.source,
+                external_ids={'arxiv': arxiv_id},
+                payload={'json_path': str(save_path)}
+            )
+
         url = f'{self.base_url}/{arxiv_id}'
         try:
             with httpx.Client() as client:
@@ -30,6 +42,7 @@ class HuggingFacePaperFetcher(BaseFetcher):
                 logger.debug(f'headers: {resp.headers}')
                 if resp.status_code == 200:
                     data = resp.json()
+                    json_dump(data, save_path, indent=2)
                     return RawPaperData(
                         source=self.source,
                         external_ids={'arxiv': arxiv_id},
