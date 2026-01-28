@@ -21,12 +21,28 @@ class ExternalIdentifiers(BaseModel):
 
 class Metadata(BaseModel):
     title: str
+    abstract: str
     authors: list[str] = []
-    year: int | None  # 2025
+
+    # publish_year: int | None
     publish_date: datetime | None = None
+    update_date: datetime | None = None
     venue: str | None  # ACL, NeurIPS, arXiv, etc.
     paper_type: str | None  # conference, journal, preprint
     source: str  # arxiv / huggingface / manual
+
+    # mainly use arxiv cats
+    primary_category: str | None = None
+    categories: list[str] = []
+
+    hf_ai_summary: str | None = None
+    hf_ai_keywords: list[str] = []
+    hf_upvotes: int = 0
+    github_url: str | None = None
+    github_stars: int | None = None
+
+    external_ids: ExternalIdentifiers
+    pdf_url: str | None = None
 
 
 class Content(BaseModel):
@@ -45,6 +61,16 @@ class PaperAnalysis(BaseModel):
 
     rigor_score: int | None = Field(None, description="1-5 评分，硬核/扎实程度", ge=1, le=5)
     relevance: str | None = Field(None, description="对用户关注方向的相关性分析")
+
+
+# Claim:
+#   id
+#   text              # 论文声称的观点
+#   type              # performance / method / theory
+#   section
+#   evidence_refs     # figure / table / paragraph
+#   compared_to       # baseline / prior work
+
 
 
 class Paper(BaseModel):

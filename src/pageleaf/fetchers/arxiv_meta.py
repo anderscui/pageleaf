@@ -4,7 +4,7 @@ from pathlib import Path
 
 import arxiv
 
-from pageleaf.commons.io.files import json_dump
+from pageleaf.commons.io.files import json_dump, json_load
 from pageleaf.fetchers.base import BaseFetcher, extract_arxiv_id, RawPaperData
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,8 @@ class ArxivMetaFetcher(BaseFetcher):
             return RawPaperData(
                 source=self.source,
                 external_ids={'arxiv': arxiv_id},
-                payload={'json_path': str(save_path)}
+                payload={'json_path': str(save_path),
+                         'data': json_load(save_path)}
             )
 
         try:
@@ -61,7 +62,8 @@ class ArxivMetaFetcher(BaseFetcher):
             return RawPaperData(
                 source=self.source,
                 external_ids={'arxiv': arxiv_id},
-                payload=converted
+                payload={'json_path': str(save_path),
+                         'data': converted}
             )
         except Exception as e:
             logger.error(f'Arxiv Metadata Fetch Error: {e}')

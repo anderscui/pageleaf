@@ -1,10 +1,13 @@
 # coding=utf-8
+import logging
 from pathlib import Path
 
 import fitz
 from pydantic import BaseModel, PrivateAttr, Field
 
 from pageleaf.commons.iterable import rename_keys
+
+logger = logging.getLogger(__name__)
 
 
 def save_image_block(
@@ -261,9 +264,9 @@ class ImageBlock(PdfBlock):
             return self.image_path.stat().st_size
         return 0
 
-    @property
-    def persisted(self):
-        return self.image_path is not None
+    # @property
+    # def persisted(self):
+    #     return self.image_path is not None
 
 
 class PdfPage(BaseModel):
@@ -294,39 +297,62 @@ class PdfDocument(BaseModel):
     object_type: str = 'document'
 
     @classmethod
-    def load_file(cls, file_path: str, image_dir: str | Path | None = None):
+    def load_file(cls,
+                  file_path: str,
+                  image_dir: str | Path | None = None,
+                  n_pages: int = None):
+
+        if n_pages is not None and n_pages < 1:
+            raise ValueError(f'Number of pages should be a positive integer.')
+
         if image_dir:
             image_dir = Path(image_dir)
+            image_dir.mkdir(parents=True, exist_ok=True)
 
         pages = []
         try:
             with fitz.open(file_path) as doc:
                 for page in doc:
                     page_number = page.number + 1
+                    if n_pages is not None and page_number > n_pages:
+                        break
                     page_obj = page.get_text('dict')
                     page_loaded = PdfPage.load(page_obj, page_number, image_dir)
                     if page_loaded is None:
                         continue
                     pages.append(page_loaded)
         except Exception as e:
-            print(f'Error loading {file_path}: {e}')
+            logger.error(f'Error loading {file_path}: {e}')
 
         return cls(pages=pages)
 
 
 if __name__ == '__main__':
     # file = '/Users/andersc/Downloads/cool nlp papers/Cognitive Architectures for Language Agents v3 (2024).pdf'
-    file = '/Users/andersc/data/papers/arxiv/2511.21631 - Qwen3-VL Technical Report.pdf'
-    doc = PdfDocument.load_file(file, image_dir='./')
-    print(f'pages: {len(doc.pages)}')
+    # file = '/Users/andersc/data/papers/arxiv/2511.21631 - Qwen3-VL Technical Report.pdf'
+    file = '/Users/andersc/Downloads/Fundamentals of Building Autonomous LLM Agents (2025.10).pdf'
+    output_dir = '/Users/andersc/data/papers/pdf/LLM Agents'
+    doc = PdfDocument.load_file(file, image_dir=output_dir, n_pages=5)
+    print(f'page count: {len(doc.pages)}\n')
     for page in doc.pages:
+        if page.page_number > 10:
+            break
+
         print(f'page {page.page_number}: ({page.width}, {page.height}), {len(page.blocks)} blocks:')
 
         for block in page.blocks:
-            print(f'block: {block.type}, {block.page_number}, {block.block_number}')
+            # print(f'block: {block.type}, {block.page_number}, {block.block_number}')
             if block.is_text():
-                print(block.text[:100])
+                print(block.text)
                 print()
+
+                if 'Background of LLMs' in block.text:
+                    print('block sample:')
+                    for line in block.lines:
+                        for span in line.spans:
+                            print(span)
+                            print()
+
             else:
                 if block.image_path:
                     print('image:', block.image_path)

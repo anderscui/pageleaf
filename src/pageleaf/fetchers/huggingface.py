@@ -4,7 +4,7 @@ from pathlib import Path
 
 import httpx
 
-from pageleaf.commons.io.files import json_dump
+from pageleaf.commons.io.files import json_dump, json_load
 from pageleaf.fetchers.base import BaseFetcher, extract_arxiv_id, RawPaperData
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,8 @@ class HuggingFacePaperFetcher(BaseFetcher):
             return RawPaperData(
                 source=self.source,
                 external_ids={'arxiv': arxiv_id},
-                payload={'json_path': str(save_path)}
+                payload={'json_path': str(save_path),
+                         'data': json_load(save_path)}
             )
 
         url = f'{self.base_url}/{arxiv_id}'
@@ -46,7 +47,8 @@ class HuggingFacePaperFetcher(BaseFetcher):
                     return RawPaperData(
                         source=self.source,
                         external_ids={'arxiv': arxiv_id},
-                        payload=data
+                        payload={'json_path': str(save_path),
+                                 'data': data}
                     )
         except Exception as e:
             logger.error(f'HF Fetch Error: {e}')
