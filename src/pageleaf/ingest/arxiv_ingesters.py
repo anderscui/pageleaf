@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pageleaf.commons.io.files import json_load
 from pageleaf.fetchers.base import extract_arxiv_id
-from pageleaf.schemas.paper import Metadata, ExternalIdentifiers
+from pageleaf.schemas.paper import Metadata
 
 
 class ArxivIngester:
@@ -55,14 +55,13 @@ class ArxivIngester:
 
         ids = {
             'arxiv': arxiv_id,
-            'doi': arxiv_meta.get('doc') or None
+            'doi': arxiv_meta.get('doi') or None
         }
         metadata['external_ids'] = ids
 
         metadata = Metadata.model_validate(metadata)
 
         print(metadata.model_dump_json(indent=2))
-
 
 
 if __name__ == '__main__':

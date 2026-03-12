@@ -6,8 +6,15 @@ import fitz
 from pydantic import BaseModel, PrivateAttr, Field
 
 from pageleaf.commons.iterable import rename_keys
+from pageleaf.commons.maths import Rectangle
 
 logger = logging.getLogger(__name__)
+
+FLAG_SUPERSCRIPT = 1 << 0
+FLAG_ITALIC = 1 << 1
+FLAG_SERIFED = 1 << 2
+FLAG_MONOSPACED = 1 << 3
+FLAG_BOLD = 1 << 4
 
 
 def save_image_block(
@@ -37,6 +44,77 @@ def save_image_block(
     return image_path
 
 
+class BoundingBox(BaseModel):
+    left: float | int
+    top: float | int
+    right: float | int
+    bottom: float | int
+
+    @classmethod
+    def from_tuple(cls, values: tuple[float, float, float, float]):
+        """
+        elements order: (left, top, right, bottom)
+        :param values:
+        :return:
+        """
+        left, top, right, bottom = values
+        return cls(left=left,
+                   top=top,
+                   right=right,
+                   bottom=bottom)
+
+    def to_tuple(self) -> tuple[float, float, float, float]:
+        return self.left, self.top, self.right, self.bottom
+
+    def resize(self, horizontal_ratio, vertical_ratio):
+        self.left = self.left * horizontal_ratio
+        self.top = self.top * vertical_ratio
+        self.right = self.right * horizontal_ratio
+        self.bottom = self.bottom * vertical_ratio
+
+    def expand(self, by=1.0):
+        return BoundingBox.from_tuple((self.left-by, self.top-by, self.right+by, self.bottom+by))
+
+    @property
+    def width(self) -> float:
+        return self.right - self.left
+
+    @property
+    def height(self) -> float:
+        return self.bottom - self.top
+
+    def round(self, n=3):
+        self.left = round(self.left, n)
+        self.right = round(self.right, n)
+        self.top = round(self.top, n)
+        self.bottom = round(self.bottom, n)
+        return self
+
+    @staticmethod
+    def merge(bboxes: list["BoundingBox"]):
+        left = min(box.left for box in bboxes)
+        top = min(box.top for box in bboxes)
+        right = max(box.right for box in bboxes)
+        bottom = max(box.bottom for box in bboxes)
+        return BoundingBox.from_tuple((left, top, right, bottom))
+
+    @staticmethod
+    def are_intersected(b1, b2, threshold=10.0):
+        intersection = BoundingBox.intersection_of(b1, b2)
+        if not intersection:
+            return False
+        if intersection.width < threshold or intersection.height < threshold:
+            return False
+        return True
+
+    @staticmethod
+    def intersection_of(b1, b2):
+        r1 = Rectangle.from_tuple(b1.to_tuple())
+        r2 = Rectangle.from_tuple(b2.to_tuple())
+        intersection = r1.intersection(r2)
+        return intersection
+
+
 class PdfFont(BaseModel):
     font_name: str
     font_size: float
@@ -48,9 +126,11 @@ class PdfFont(BaseModel):
 
 
 class PdfSpan(BaseModel):
+    _font: PdfFont | None = PrivateAttr(default=None)
+
     page_number: int
     origin: tuple[float, float]
-    bbox: tuple[float, float, float, float]
+    bbox: BoundingBox
 
     text: str
 
@@ -74,33 +154,35 @@ class PdfSpan(BaseModel):
         })
         data['page_number'] = page_number
         # data['origin'] = data['origin']
-        # data['bbox'] = data['bbox']
+        data['bbox'] = BoundingBox.from_tuple(data['bbox'])
 
         return cls.model_validate(data)
 
     @property
     def font(self):
-        return PdfFont(font_name=self.font_name,
-                       font_size=self.font_size,
-                       font_color=self.font_color,
-                       is_bold=self.is_bold(),
-                       is_italic=self.is_italic(),
-                       is_monospaced=self.is_monospaced())
+        if self._font is None:
+            self._font = PdfFont(font_name=self.font_name,
+                           font_size=self.font_size,
+                           font_color=self.font_color,
+                           is_bold=self.is_bold(),
+                           is_italic=self.is_italic(),
+                           is_monospaced=self.is_monospaced())
+        return self._font
 
     def is_super_script(self):
-        return self.flags & (2 ** 0) > 0
+        return (self.flags & FLAG_SUPERSCRIPT) > 0
 
     def is_italic(self):
-        return self.flags & (2 ** 1) > 0
+        return (self.flags & FLAG_ITALIC) > 0
 
     def is_serifed(self):
-        return self.flags & (2 ** 2) > 0
+        return (self.flags & FLAG_SERIFED) > 0
 
     def is_monospaced(self):
-        return self.flags & (2 ** 3) > 0
+        return (self.flags & FLAG_MONOSPACED) > 0
 
     def is_bold(self):
-        return self.flags & (2 ** 4) > 0
+        return (self.flags & FLAG_BOLD) > 0
 
 
 class PdfLine(BaseModel):
@@ -109,7 +191,7 @@ class PdfLine(BaseModel):
     page_number: int
     writing_mode: int
     dir: tuple[float, float] = ()
-    bbox: tuple[float, float, float, float] = ()
+    bbox: BoundingBox
 
     spans: list[PdfSpan]
 
@@ -134,8 +216,8 @@ class PdfLine(BaseModel):
             return None
 
         data['spans'] = spans
-        # span_bboxes = [span.bbox for span in spans]
-        # data['bbox'] = BoundingBox.merge(span_bboxes)
+        span_bboxes = [span.bbox for span in spans]
+        data['bbox'] = BoundingBox.merge(span_bboxes)
         return cls.model_validate(data)
 
     @property
@@ -145,7 +227,7 @@ class PdfLine(BaseModel):
             for i, s in enumerate(self.spans):
                 if i < len(self.spans) - 1:
                     next_span = self.spans[i + 1]
-                    end = '' if next_span.bbox[0] - s.bbox[2] < 0.1 else ' '
+                    end = '' if next_span.bbox.left - s.bbox.right < 0.1 else ' '
                     ends.append(end)
                 else:
                     ends.append('')
@@ -169,19 +251,19 @@ class PdfBlock(BaseModel):
 
     type: int
     block_number: int
-    bbox: tuple[float, float, float, float]
+    bbox: BoundingBox
 
     lines: list[PdfLine] = Field(default_factory=list)
 
     object_type: str = 'block'
 
     @classmethod
-    def load(cls, data: dict, page_number, image_dir: Path | None = None):
+    def load(cls, data: dict, page_number, **kwargs):
         _type = data['type']
         if _type == 0:
-            return TextBlock.load(data, page_number)
+            return TextBlock.load(data, page_number, **kwargs)
         elif _type == 1:
-            return ImageBlock.load(data, page_number, image_dir=image_dir)
+            return ImageBlock.load(data, page_number, **kwargs)
         return None
 
     def is_text(self):
@@ -205,10 +287,10 @@ class TextBlock(PdfBlock):
     flags: int
 
     @classmethod
-    def load(cls, data: dict, page_number):
+    def load(cls, data: dict, page_number, **kwargs):
         data['block_number'] = data.pop('number', None)
         data['page_number'] = page_number
-        # data['bbox'] = BoundingBox.from_tuple(data['bbox'])
+        data['bbox'] = BoundingBox.from_tuple(data['bbox'])
 
         lines = data.get('lines') or []
         if not lines:
@@ -237,13 +319,13 @@ class ImageBlock(PdfBlock):
     height: int
 
     ext: str
-    image: bytes | None = None
+    image: bytes | None = Field(default=None, exclude=True)
     image_path: Path | None = None
     mask: bytes | None = None
 
 
     @classmethod
-    def load(cls, data: dict, page_number: int, image_dir: Path | None = None):
+    def load(cls, data: dict, page_number: int, *, image_dir: Path | None = None, keep_in_memory: bool = False, **kwargs):
         data['block_number'] = data.pop('number', None)
         data['page_number'] = page_number
 
@@ -252,8 +334,12 @@ class ImageBlock(PdfBlock):
             if not saved_path:
                 return None
             data['image_path'] = saved_path
-            data.pop('image', None)
 
+        if not keep_in_memory:
+            data.pop('image', None)
+            data.pop('mask', None)
+
+        data['bbox'] = BoundingBox.from_tuple(data['bbox'])
         return cls.model_validate(data)
 
     @property
@@ -285,7 +371,7 @@ class PdfPage(BaseModel):
         if not blocks:
             return None
 
-        blocks = [PdfBlock.load(block, page_number, image_dir) for block in blocks]
+        blocks = [PdfBlock.load(block, page_number, image_dir=image_dir) for block in blocks]
         blocks = [block for block in blocks if block is not None]
         data['blocks'] = blocks
         return cls.model_validate(data)
@@ -321,8 +407,9 @@ class PdfDocument(BaseModel):
                     if page_loaded is None:
                         continue
                     pages.append(page_loaded)
-        except Exception as e:
-            logger.error(f'Error loading {file_path}: {e}')
+        except Exception:
+            logger.error(f'Error loading {file_path}')
+            raise
 
         return cls(pages=pages)
 
@@ -330,9 +417,9 @@ class PdfDocument(BaseModel):
 if __name__ == '__main__':
     # file = '/Users/andersc/Downloads/cool nlp papers/Cognitive Architectures for Language Agents v3 (2024).pdf'
     # file = '/Users/andersc/data/papers/arxiv/2511.21631 - Qwen3-VL Technical Report.pdf'
-    file = '/Users/andersc/Downloads/Fundamentals of Building Autonomous LLM Agents (2025.10).pdf'
+    file = '/Users/andersc/Downloads/papers/Fundamentals of Building Autonomous LLM Agents (2025.10).pdf'
     output_dir = '/Users/andersc/data/papers/pdf/LLM Agents'
-    doc = PdfDocument.load_file(file, image_dir=output_dir, n_pages=5)
+    doc = PdfDocument.load_file(file, image_dir=output_dir, n_pages=50)
     print(f'page count: {len(doc.pages)}\n')
     for page in doc.pages:
         if page.page_number > 10:
@@ -343,19 +430,20 @@ if __name__ == '__main__':
         for block in page.blocks:
             # print(f'block: {block.type}, {block.page_number}, {block.block_number}')
             if block.is_text():
-                print(block.text)
+                # print(block.text)
                 print()
 
-                if 'Background of LLMs' in block.text:
-                    print('block sample:')
-                    for line in block.lines:
-                        for span in line.spans:
-                            print(span)
-                            print()
+                # if 'Background of LLMs' in block.text:
+                #     print('block sample:')
+                #     for line in block.lines:
+                #         for span in line.spans:
+                #             print(span)
+                #             print()
 
             else:
                 if block.image_path:
                     print('image:', block.image_path)
+                    print(block.bbox)
                     print()
 
         print('\n')
